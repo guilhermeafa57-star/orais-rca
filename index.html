@@ -44,18 +44,29 @@
     window.addEventListener('message', function (ev) {
       var d = ev.data || {};
       if (d.tipo !== 'orais-wa' || !d.arquivos || !d.arquivos.length) return;
+      window.__oraisWaUltimo = d;
       try { ev.source.postMessage({ tipo: 'orais-wa-ok' }, '*'); } catch (e) {}
-      var files = [];
-      try { for (var i = 0; i < d.arquivos.length; i++) files.push(b64ToFile(d.arquivos[i].b64, d.arquivos[i].nome, d.arquivos[i].mime)); } catch (eF) { files = []; }
-      var podeAnexo = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
       fechar();
+      // arquivos vem em base64 (Drive) ou por URL (fotos do site, baixadas aqui direto do CDN)
+      var pend = d.arquivos.map(function (a) {
+        if (a.b64) { try { return Promise.resolve(b64ToFile(a.b64, a.nome, a.mime)); } catch (e1) { return Promise.resolve(null); } }
+        return fetch(a.url).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+          .then(function (bl) { return new File([bl], a.nome || 'arquivo', { type: bl.type || a.mime || 'application/octet-stream' }); })
+          .catch(function () { return null; });
+      });
+      Promise.all(pend).then(function (fs) { montar(fs.filter(function (x) { return !!x; })); });
+    });
+    function montar(files) {
+      var d = window.__oraisWaUltimo || {};
+      var podeAnexo = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
+      if (!files.length) { window.open('https://wa.me/?text=' + encodeURIComponent(d.texto || ''), '_blank'); return; }
       var ov = document.createElement('div'); ov.id = 'orais-wa';
       ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
       var nomes = files.map(function (f) { return f.name; }).join('<br>');
       ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
         '<div style="font-size:18px;font-weight:800;color:#2F5556;margin-bottom:6px;">' + (d.titulo || 'Enviar jogo') + '</div>' +
-        '<div style="font-size:13px;color:#555;margin-bottom:16px;">' + (podeAnexo ? 'PDF em anexo:<br>' : 'Os PDFs vão ser baixados; anexe-os na conversa.<br>') + '<b>' + nomes + '</b></div>' +
-        '<button id="orais-wa-ir" style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:17px;font-weight:800;cursor:pointer;">' + (podeAnexo ? '📲 Enviar pelo WhatsApp' : '📥 Baixar PDFs e abrir WhatsApp') + '</button>' +
+        '<div style="font-size:13px;color:#555;margin-bottom:16px;">' + (podeAnexo ? 'Em anexo:<br>' : 'Os arquivos vão ser baixados; anexe-os na conversa.<br>') + '<b>' + nomes + '</b></div>' +
+        '<button id="orais-wa-ir" style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:17px;font-weight:800;cursor:pointer;">' + (podeAnexo ? '📲 Enviar pelo WhatsApp' : '📥 Baixar arquivos e abrir WhatsApp') + '</button>' +
         '<button id="orais-wa-x" style="width:100%;min-height:44px;margin-top:10px;border:1px solid #E9EEEE;border-radius:999px;background:#fff;color:#2F5556;font-size:15px;font-weight:700;cursor:pointer;">Cancelar</button></div>';
       document.body.appendChild(ov);
       document.getElementById('orais-wa-x').onclick = fechar;
@@ -78,7 +89,7 @@
         window.open('https://wa.me/?text=' + encodeURIComponent(d.texto || ''), '_blank');
         fechar();
       }
-    });
+    }
   })();
 </script>
 </body>

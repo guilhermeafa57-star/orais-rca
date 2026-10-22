@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4F8E90">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Orais RCA">
+<title>Orais RCA</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="https://app.orais.com.br/icon-192.png">
+<link rel="apple-touch-icon" href="https://app.orais.com.br/apple-touch-icon.png">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #FFFFFF; overflow: hidden; }
+  iframe { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; border: 0; display: block;
+           padding-top: env(safe-area-inset-top); box-sizing: border-box; background: #FFFFFF; }
+  #carregando { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+                font: 600 18px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: #4F8E90; }
+</style>
+</head>
+<body>
+<div id="carregando">Carregando Orais RCA…</div>
+<iframe id="app" src="https://script.google.com/macros/s/AKfycbxFdepvBbEWem8CKOAoQZ6-lykkHVmChfGy_2LXwu43fpL5UC9c1XXp1-IK7N2yfa9m/exec?rca=1" allow="clipboard-write; camera" title="Orais RCA"></iframe>
+<script>
+  document.getElementById('app').addEventListener('load', function () {
+    var c = document.getElementById('carregando'); if (c) c.remove();
+  });
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+</script>
+</body>
+</html>

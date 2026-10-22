@@ -31,5 +31,55 @@
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
   }
 </script>
+<script>
+  // wa_pdf: o app (dentro do iframe) manda a mensagem + PDFs; o casco abre o compartilhamento nativo
+  // (WhatsApp aparece na lista) com os arquivos em anexo. Sem suporte: baixa os PDFs e abre o WhatsApp com o texto.
+  (function () {
+    function b64ToFile(b64, nome, mime) {
+      var bin = atob(b64), n = bin.length, u8 = new Uint8Array(n);
+      for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+      return new File([u8], nome, { type: mime || 'application/pdf' });
+    }
+    function fechar() { var o = document.getElementById('orais-wa'); if (o) o.remove(); }
+    window.addEventListener('message', function (ev) {
+      var d = ev.data || {};
+      if (d.tipo !== 'orais-wa' || !d.arquivos || !d.arquivos.length) return;
+      try { ev.source.postMessage({ tipo: 'orais-wa-ok' }, '*'); } catch (e) {}
+      var files = [];
+      try { for (var i = 0; i < d.arquivos.length; i++) files.push(b64ToFile(d.arquivos[i].b64, d.arquivos[i].nome, d.arquivos[i].mime)); } catch (eF) { files = []; }
+      var podeAnexo = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
+      fechar();
+      var ov = document.createElement('div'); ov.id = 'orais-wa';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
+      var nomes = files.map(function (f) { return f.name; }).join('<br>');
+      ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+        '<div style="font-size:18px;font-weight:800;color:#2F5556;margin-bottom:6px;">' + (d.titulo || 'Enviar jogo') + '</div>' +
+        '<div style="font-size:13px;color:#555;margin-bottom:16px;">' + (podeAnexo ? 'PDF em anexo:<br>' : 'Os PDFs vão ser baixados; anexe-os na conversa.<br>') + '<b>' + nomes + '</b></div>' +
+        '<button id="orais-wa-ir" style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:17px;font-weight:800;cursor:pointer;">' + (podeAnexo ? '📲 Enviar pelo WhatsApp' : '📥 Baixar PDFs e abrir WhatsApp') + '</button>' +
+        '<button id="orais-wa-x" style="width:100%;min-height:44px;margin-top:10px;border:1px solid #E9EEEE;border-radius:999px;background:#fff;color:#2F5556;font-size:15px;font-weight:700;cursor:pointer;">Cancelar</button></div>';
+      document.body.appendChild(ov);
+      document.getElementById('orais-wa-x').onclick = fechar;
+      document.getElementById('orais-wa-ir').onclick = function () {
+        if (podeAnexo) {
+          navigator.share({ files: files, text: d.texto || '', title: d.titulo || '' }).then(fechar).catch(function (err) {
+            if (err && err.name === 'AbortError') { fechar(); return; }
+            // falhou de verdade: baixa e abre o texto
+            baixarEAbrir();
+          });
+        } else baixarEAbrir();
+      };
+      function baixarEAbrir() {
+        try {
+          for (var i = 0; i < files.length; i++) {
+            var a = document.createElement('a'); a.href = URL.createObjectURL(files[i]); a.download = files[i].name; document.body.appendChild(a); a.click();
+            (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a);
+          }
+        } catch (eD) {}
+        window.open('https://wa.me/?text=' + encodeURIComponent(d.texto || ''), '_blank');
+        fechar();
+      }
+    });
+  })();
+</script>
 </body>
 </html>

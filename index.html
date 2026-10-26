@@ -107,6 +107,43 @@
       try { src.postMessage({ tipo: 'orais-wa-ok' }, '*'); } catch (e) {}
       var i = 0, enviados = 0;
       function fim() { fechar(); try { src.postMessage({ tipo: 'orais-wa-lote-fim', enviados: enviados }, '*'); } catch (e) {} }
+      // tela inicial: tudo de uma vez (1 compartilhamento, legenda com todos os produtos) ou um por um
+      function escolha() {
+        fechar();
+        var totalF = 0; for (var q = 0; q < d.lotes.length; q++) totalF += d.lotes[q].arquivos.length;
+        var ov = document.createElement('div'); ov.id = 'orais-wa';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
+        ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+          '<div style="font-size:17px;font-weight:800;color:#2F5556;margin-bottom:4px;">' + d.lotes.length + ' produto(s) · ' + totalF + ' foto(s)</div>' +
+          '<div id="orais-wa-st" style="font-size:13px;color:#555;margin-bottom:16px;">Baixando as fotos...</div>' +
+          '<button id="orais-wa-tudo" disabled style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:16px;font-weight:800;cursor:pointer;opacity:.6;">📲 Enviar tudo de uma vez</button>' +
+          '<div style="font-size:11px;color:#64748b;margin:6px 0 10px;">Todas as fotos juntas, com a descrição de todos os produtos na legenda</div>' +
+          '<button id="orais-wa-umum" style="width:100%;min-height:46px;border:1px solid #CFE0E0;border-radius:999px;background:#E4EFEF;color:#2F5556;font-size:15px;font-weight:700;cursor:pointer;">Um produto por vez (legenda em cada)</button>' +
+          '<button id="orais-wa-x" style="width:100%;min-height:40px;margin-top:6px;border:0;background:none;color:#64748b;font-size:14px;cursor:pointer;">Cancelar</button></div>';
+        document.body.appendChild(ov);
+        document.getElementById('orais-wa-x').onclick = fim;
+        document.getElementById('orais-wa-umum').onclick = function () { i = 0; passo(); };
+        var todos = [];
+        d.lotes.forEach(function (l) { l.arquivos.forEach(function (a) { todos.push(a); }); });
+        Promise.all(todos.map(baixarUrl)).then(function (fs) {
+          var files = fs.filter(function (x) { return !!x; });
+          var st = document.getElementById('orais-wa-st'), bt = document.getElementById('orais-wa-tudo'); if (!st || !bt) return;
+          var pode = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
+          var texto = d.lotes.map(function (l) { return l.texto || ''; }).join('\n\n');
+          st.textContent = pode ? files.length + ' foto(s) prontas.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
+          bt.disabled = false; bt.style.opacity = '1';
+          bt.onclick = function () {
+            if (pode) {
+              navigator.share({ files: files, text: texto, title: d.titulo || '' }).then(function () { enviados = d.lotes.length; fim(); })
+                .catch(function (err) { if (err && err.name === 'AbortError') return; });
+            } else {
+              for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
+              window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+              enviados = d.lotes.length; fim();
+            }
+          };
+        });
+      }
       function passo() {
         if (i >= d.lotes.length) { fim(); return; }
         var lote = d.lotes[i];
@@ -141,7 +178,7 @@
           };
         });
       }
-      passo();
+      escolha();
     });
   })();
 </script>

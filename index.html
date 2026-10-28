@@ -139,7 +139,12 @@
           bt.onclick = function () {
             if (pode) {
               navigator.share({ files: files, text: texto, title: d.titulo || '' }).then(function () { enviados = d.lotes.length; fim(); })
-                .catch(function (err) { if (err && err.name === 'AbortError') return; });
+                .catch(function (err) {   // lote_fallback: se o compartilhar falhar (ex.: computador), baixa os arquivos e abre o WhatsApp com o texto
+                  if (err && err.name === 'AbortError') return;
+                  for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
+                  window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+                  enviados = d.lotes.length; fim();
+                });
             } else {
               for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
               window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
@@ -173,7 +178,12 @@
           bt.onclick = function () {
             if (pode) {
               navigator.share({ files: files, text: lote.texto || '', title: lote.titulo || '' }).then(function () { enviados++; i++; passo(); })
-                .catch(function (err) { if (err && err.name === 'AbortError') return; i++; passo(); });
+                .catch(function (err) {   // lote_fallback
+                  if (err && err.name === 'AbortError') return;
+                  for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
+                  window.open('https://wa.me/?text=' + encodeURIComponent(lote.texto || ''), '_blank');
+                  enviados++; i++; passo();
+                });
             } else {
               for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
               window.open('https://wa.me/?text=' + encodeURIComponent(lote.texto || ''), '_blank');

@@ -22,7 +22,7 @@
 </head>
 <body>
 <div id="carregando">Carregando Orais RCA…</div>
-<iframe id="app" src="https://script.google.com/macros/s/AKfycbxFdepvBbEWem8CKOAoQZ6-lykkHVmChfGy_2LXwu43fpL5UC9c1XXp1-IK7N2yfa9m/exec?rca=1" allow="clipboard-write; camera" title="Orais RCA"></iframe>
+<iframe id="app" src="https://script.google.com/macros/s/AKfycbxFdepvBbEWem8CKOAoQZ6-lykkHVmChfGy_2LXwu43fpL5UC9c1XXp1-IK7N2yfa9m/exec?rca=1" allow="clipboard-write; camera; microphone" title="Orais RCA"></iframe>
 <script>
   document.getElementById('app').addEventListener('load', function () {
     var c = document.getElementById('carregando'); if (c) c.remove();
@@ -97,6 +97,10 @@
   (function () {
     function fechar() { var o = document.getElementById('orais-wa'); if (o) o.remove(); }
     function baixarUrl(a) {
+      if (a.b64) {   // videos_wa: arquivo que ja vem pronto (video do Drive)
+        try { var bin = atob(a.b64), n = bin.length, u8 = new Uint8Array(n); while (n--) u8[n] = bin.charCodeAt(n); return Promise.resolve(new File([u8], a.nome || 'video.mp4', { type: a.mime || 'video/mp4' })); }
+        catch (eB) { return Promise.resolve(null); }
+      }
       return fetch(a.url).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
         .then(function (bl) { return new File([bl], a.nome || 'foto.jpg', { type: bl.type || a.mime || 'image/jpeg' }); }).catch(function () { return null; });
     }
@@ -114,7 +118,7 @@
         var ov = document.createElement('div'); ov.id = 'orais-wa';
         ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
         ov.innerHTML = '<div style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
-          '<div style="font-size:17px;font-weight:800;color:#2F5556;margin-bottom:4px;">' + d.lotes.length + ' produto(s) · ' + totalF + ' foto(s)</div>' +
+          '<div style="font-size:17px;font-weight:800;color:#2F5556;margin-bottom:4px;">' + d.lotes.length + ' produto(s) · ' + totalF + ' arquivo(s)</div>' +
           '<div id="orais-wa-st" style="font-size:13px;color:#555;margin-bottom:16px;">Baixando as fotos...</div>' +
           '<button id="orais-wa-tudo" disabled style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:16px;font-weight:800;cursor:pointer;opacity:.6;">📲 Enviar tudo de uma vez</button>' +
           '<div style="font-size:11px;color:#64748b;margin:6px 0 10px;">Todas as fotos juntas, com a descrição de todos os produtos na legenda</div>' +
@@ -130,7 +134,7 @@
           var st = document.getElementById('orais-wa-st'), bt = document.getElementById('orais-wa-tudo'); if (!st || !bt) return;
           var pode = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
           var texto = d.lotes.map(function (l) { return l.texto || ''; }).join('\n\n');
-          st.textContent = pode ? files.length + ' foto(s) prontas.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
+          st.textContent = pode ? files.length + ' arquivo(s) prontos.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
           bt.disabled = false; bt.style.opacity = '1';
           bt.onclick = function () {
             if (pode) {

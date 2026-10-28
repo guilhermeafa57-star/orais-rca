@@ -127,18 +127,17 @@
         document.body.appendChild(ov);
         document.getElementById('orais-wa-x').onclick = fim;
         document.getElementById('orais-wa-umum').onclick = function () { i = 0; passo(); };
-        // ordem_video: com video na lista, o WhatsApp manda todas as fotos antes dos videos no envio unico.
-        // Por isso "um produto por vez" vira o botao principal (fotos + video de cada produto, na ordem).
+        // envio_unico: o botao principal SEMPRE manda todos os produtos num toque so (o navegador exige 1 toque por compartilhamento,
+        // entao "um por vez" continua existindo so como opcao secundaria).
         var temVid = d.lotes.some(function (l) { return l.arquivos.some(function (a) { return !!a.b64 || /^video\//.test(a.mime || ''); }); });
-        if (temVid) {
-          var bU = document.getElementById('orais-wa-umum'), bT = document.getElementById('orais-wa-tudo');
-          bU.style.cssText = 'width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:16px;font-weight:800;cursor:pointer;';
-          bU.textContent = '📲 Um produto por vez (fotos + vídeo de cada)';
-          bT.style.background = '#E4EFEF'; bT.style.color = '#2F5556'; bT.style.border = '1px solid #CFE0E0'; bT.style.fontSize = '15px';
-          bT.textContent = 'Tudo de uma vez (vídeos chegam no fim)';
-          var dica = bT.nextElementSibling; if (dica) dica.textContent = 'No envio único o WhatsApp manda todas as fotos primeiro e os vídeos depois.';
-          bT.parentNode.insertBefore(bU, bT);
-        }
+        var bT0 = document.getElementById('orais-wa-tudo'), bU0 = document.getElementById('orais-wa-umum');
+        bT0.textContent = '📲 Enviar os ' + d.lotes.length + ' produtos pelo WhatsApp';
+        if (d.lotes.length === 1) bT0.textContent = '📲 Enviar pelo WhatsApp';
+        var dica0 = bT0.nextElementSibling;
+        if (dica0) dica0.textContent = temVid ? 'Tudo num envio só. O WhatsApp manda as fotos primeiro e os vídeos no final.' : 'Tudo num envio só, com a descrição de cada produto na legenda.';
+        bU0.style.cssText = 'width:100%;min-height:40px;border:0;background:none;color:#2F5556;font-size:14px;font-weight:600;text-decoration:underline;cursor:pointer;';
+        bU0.textContent = temVid ? 'Prefiro um produto por vez (vídeo junto de cada)' : 'Prefiro um produto por vez';
+        if (d.lotes.length === 1) bU0.style.display = 'none';
         var todos = [];
         d.lotes.forEach(function (l) { l.arquivos.forEach(function (a) { todos.push(a); }); });
         Promise.all(todos.map(baixarUrl)).then(function (fs) {

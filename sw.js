@@ -1,4 +1,4 @@
-var CACHE = 'orais-rca-casco-v4';
+var CACHE = 'orais-rca-casco-v5';
 var ARQS = ['./', 'index.html', 'manifest.webmanifest'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQS); }));

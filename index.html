@@ -49,6 +49,7 @@
       fechar();
       // arquivos vem em base64 (Drive) ou por URL (fotos do site, baixadas aqui direto do CDN)
       var pend = d.arquivos.map(function (a) {
+        if (a.blob) return Promise.resolve(new File([a.blob], a.nome || 'arquivo', { type: a.mime || a.blob.type || 'application/octet-stream' }));   // wa_rapido: arquivo grande ja vem pronto (Blob)
         if (a.b64) { try { return Promise.resolve(b64ToFile(a.b64, a.nome, a.mime)); } catch (e1) { return Promise.resolve(null); } }
         return fetch(a.url).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
           .then(function (bl) { return new File([bl], a.nome || 'arquivo', { type: bl.type || a.mime || 'application/octet-stream' }); })
@@ -97,6 +98,7 @@
   (function () {
     function fechar() { var o = document.getElementById('orais-wa'); if (o) o.remove(); }
     function baixarUrl(a) {
+      if (a.blob) return Promise.resolve(new File([a.blob], a.nome || 'video.mp4', { type: a.mime || a.blob.type || 'video/mp4' }));   // wa_rapido
       if (a.b64) {   // videos_wa: arquivo que ja vem pronto (video do Drive)
         try { var bin = atob(a.b64), n = bin.length, u8 = new Uint8Array(n); while (n--) u8[n] = bin.charCodeAt(n); return Promise.resolve(new File([u8], a.nome || 'video.mp4', { type: a.mime || 'video/mp4' })); }
         catch (eB) { return Promise.resolve(null); }
@@ -129,7 +131,7 @@
         document.getElementById('orais-wa-umum').onclick = function () { i = 0; passo(); };
         // envio_unico: o botao principal SEMPRE manda todos os produtos num toque so (o navegador exige 1 toque por compartilhamento,
         // entao "um por vez" continua existindo so como opcao secundaria).
-        var temVid = d.lotes.some(function (l) { return l.arquivos.some(function (a) { return !!a.b64 || /^video\//.test(a.mime || ''); }); });
+        var temVid = d.lotes.some(function (l) { return l.arquivos.some(function (a) { return !!a.b64 || !!a.blob || /^video\//.test(a.mime || ''); }); });
         var bT0 = document.getElementById('orais-wa-tudo'), bU0 = document.getElementById('orais-wa-umum');
         bT0.textContent = '📲 Enviar os ' + d.lotes.length + ' produtos pelo WhatsApp';
         if (d.lotes.length === 1) bT0.textContent = '📲 Enviar pelo WhatsApp';

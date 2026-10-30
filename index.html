@@ -32,6 +32,81 @@
   }
 </script>
 <script>
+  // wa_video_ok: todo arquivo que o app manda vira um File NOVO deste documento (copia), com o tipo certo e o tamanho conferido.
+  // Tambem: previa do video na tela (toque pra assistir) e opcao de mandar o video como arquivo.
+  (function () {
+    function mimeDe(nome, mime) {
+      mime = String(mime || ''); nome = String(nome || '');
+      if (/^video\//.test(mime)) return mime;
+      if (/\.mp4$/i.test(nome)) return 'video/mp4';
+      if (/\.mov$/i.test(nome)) return 'video/quicktime';
+      if (/\.pdf$/i.test(nome)) return 'application/pdf';
+      if (/\.png$/i.test(nome)) return 'image/png';
+      if (/\.jpe?g$/i.test(nome)) return 'image/jpeg';
+      return mime || 'application/octet-stream';
+    }
+    function b64ParaU8(b64) { var bin = atob(b64), n = bin.length, u8 = new Uint8Array(n); for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i); return u8; }
+    // a = {nome, mime, buf | blob | b64 | url, tam?}  ->  Promise<File|null>
+    window._oraisArquivo = function (a, fonte) {
+      var nome = a.nome || 'arquivo', tipo = mimeDe(nome, a.mime);
+      function avisa(motivo) { try { if (fonte) fonte.postMessage({ tipo: 'orais-wa-arquivo-ruim', nome: nome, motivo: motivo || '' }, '*'); } catch (e) {} }
+      function pronto(dados) {
+        var f = new File([dados], nome, { type: tipo, lastModified: Date.now() });
+        if (!f.size) { avisa('vazio'); return null; }
+        if (a.tam && Number(a.tam) > 0 && f.size !== Number(a.tam)) { avisa('tamanho ' + f.size + ' != ' + a.tam); return null; }
+        return f;
+      }
+      try {
+        if (a.buf) return Promise.resolve(pronto(a.buf));
+        if (a.blob) {
+          var bl = a.blob;
+          var lerAB = bl.arrayBuffer ? bl.arrayBuffer() : new Promise(function (ok, er) { var fr = new FileReader(); fr.onload = function () { ok(fr.result); }; fr.onerror = function () { er(fr.error); }; fr.readAsArrayBuffer(bl); });
+          return lerAB.then(function (ab) { return pronto(ab); }).catch(function () { avisa('nao li o blob'); return null; });
+        }
+        if (a.b64) return Promise.resolve(pronto(b64ParaU8(a.b64)));
+        if (a.url) return fetch(a.url).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+          .then(function (b2) { return new File([b2], nome, { type: b2.type || tipo }); }).catch(function () { return null; });
+      } catch (e) { avisa(String(e)); }
+      return Promise.resolve(null);
+    };
+    window._oraisEhVideo = function (f) { return !!f && (/^video\//.test(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '')); };
+    // videos como "arquivo" (documento): mesmo conteudo, sem o tipo video — pro WhatsApp que recusa o video (iPhone)
+    window._oraisComoArquivo = function (files) {
+      return files.map(function (f) { return window._oraisEhVideo(f) ? new File([f], f.name, { type: 'application/octet-stream', lastModified: f.lastModified || Date.now() }) : f; });
+    };
+    var LS_DOC = 'orais_wa_video_doc';
+    window._oraisVideoDocPref = function (v) { try { if (v === undefined) return localStorage.getItem(LS_DOC) === '1'; localStorage.setItem(LS_DOC, v ? '1' : '0'); } catch (e) {} return !!v; };
+    // previa: <video> com controles. cb(ok) quando o aparelho conseguiu (ou nao) abrir o video.
+    window._oraisPreviaVideo = function (file, cb, compacta) {
+      var url = URL.createObjectURL(file);
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'margin:0 0 6px;border-radius:14px;overflow:hidden;background:#000;';
+      var v = document.createElement('video');
+      v.controls = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.preload = 'metadata'; v.src = url;
+      v.style.cssText = 'display:block;width:100%;max-height:' + (compacta ? '28vh' : '40vh') + ';background:#000;';
+      wrap.appendChild(v);
+      var leg = document.createElement('div');
+      leg.style.cssText = 'font-size:12px;color:#555;margin:0 0 12px;text-align:left;';
+      leg.innerHTML = '▶ <b>' + String(file.name || '').replace(/</g, '&lt;') + '</b> · toque para assistir antes de enviar';
+      var feito = false;
+      function fim(ok, msg) { if (feito) return; feito = true; if (!ok) leg.innerHTML = '<span style="color:#b45309;font-weight:700;">⚠ ' + msg + '</span>'; try { cb && cb(ok); } catch (e) {} }
+      v.addEventListener('loadedmetadata', function () { if (isFinite(v.duration) && v.duration > 0) fim(true); });
+      v.addEventListener('error', function () { fim(false, 'Este aparelho não conseguiu abrir o vídeo. No WhatsApp ele pode chegar preto: marquei pra mandar como arquivo.'); });
+      return { el: wrap, legenda: leg, video: v, solta: function () { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} try { URL.revokeObjectURL(url); } catch (e2) {} } };
+    };
+    // bloco "mandar videos como arquivo" (checkbox) — devolve {el, marcado()}
+    window._oraisOpcaoDoc = function (id) {
+      var lab = document.createElement('label');
+      lab.style.cssText = 'display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px;color:#2F5556;margin:8px 0 2px;cursor:pointer;';
+      var ck = document.createElement('input'); ck.type = 'checkbox'; ck.id = id; ck.style.cssText = 'width:18px;height:18px;'; ck.checked = window._oraisVideoDocPref();
+      ck.addEventListener('change', function () { window._oraisVideoDocPref(ck.checked); });
+      lab.appendChild(ck);
+      var tx = document.createElement('span'); tx.textContent = 'Mandar vídeo como arquivo (se chega preto no WhatsApp)'; lab.appendChild(tx);
+      return { el: lab, marcado: function () { return !!ck.checked; }, marcar: function () { ck.checked = true; window._oraisVideoDocPref(true); } };
+    };
+  })();
+</script>
+<script>
   // wa_pdf: o app (dentro do iframe) manda a mensagem + PDFs; o casco abre o compartilhamento nativo
   // (WhatsApp aparece na lista) com os arquivos em anexo. Sem suporte: baixa os PDFs e abre o WhatsApp com o texto.
   (function () {
@@ -48,14 +123,13 @@
       try { ev.source.postMessage({ tipo: 'orais-wa-ok' }, '*'); } catch (e) {}
       fechar();
       // arquivos vem em base64 (Drive) ou por URL (fotos do site, baixadas aqui direto do CDN)
-      var pend = d.arquivos.map(function (a) {
-        if (a.blob) return Promise.resolve(new File([a.blob], a.nome || 'arquivo', { type: a.mime || a.blob.type || 'application/octet-stream' }));   // wa_rapido: arquivo grande ja vem pronto (Blob)
-        if (a.b64) { try { return Promise.resolve(b64ToFile(a.b64, a.nome, a.mime)); } catch (e1) { return Promise.resolve(null); } }
-        return fetch(a.url).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
-          .then(function (bl) { return new File([bl], a.nome || 'arquivo', { type: bl.type || a.mime || 'application/octet-stream' }); })
-          .catch(function () { return null; });
+      var fonteWa = ev.source;
+      var pend = d.arquivos.map(function (a) { return window._oraisArquivo(a, fonteWa); });   // wa_video_ok: File novo deste documento, tipo e tamanho conferidos
+      Promise.all(pend).then(function (fs) {
+        var ok = fs.filter(function (x) { return !!x; });
+        if (ok.length < fs.length && !ok.length) { alert('O arquivo chegou incompleto. Feche e tente de novo — na próxima ele é baixado outra vez.'); fechar(); return; }
+        montar(ok);
       });
-      Promise.all(pend).then(function (fs) { montar(fs.filter(function (x) { return !!x; })); });
     });
     function montar(files) {
       var d = window.__oraisWaUltimo || {};
@@ -70,11 +144,29 @@
         '<button id="orais-wa-ir" style="width:100%;min-height:52px;border:0;border-radius:999px;background:#25D366;color:#fff;font-size:17px;font-weight:800;cursor:pointer;">' + (podeAnexo ? '📲 Enviar pelo WhatsApp' : '📥 Baixar arquivos e abrir WhatsApp') + '</button>' +
         '<button id="orais-wa-x" style="width:100%;min-height:44px;margin-top:10px;border:1px solid #E9EEEE;border-radius:999px;background:#fff;color:#2F5556;font-size:15px;font-weight:700;cursor:pointer;">Cancelar</button></div>';
       document.body.appendChild(ov);
-      document.getElementById('orais-wa-x').onclick = fechar;
+      // wa_video_ok: previa do(s) video(s) na propria tela + opcao de mandar como arquivo
+      var previas = [], opDoc = null;
+      try {
+        var vids = files.filter(window._oraisEhVideo);
+        if (vids.length && podeAnexo) {
+          var btnIr0 = document.getElementById('orais-wa-ir');
+          var caixaP = document.createElement('div'); caixaP.id = 'orais-wa-previa';
+          vids.forEach(function (f) {
+            var pv = window._oraisPreviaVideo(f, function (okV) { if (!okV && opDoc) opDoc.marcar(); });
+            previas.push(pv); caixaP.appendChild(pv.el); caixaP.appendChild(pv.legenda);
+          });
+          btnIr0.parentNode.insertBefore(caixaP, btnIr0);
+          opDoc = window._oraisOpcaoDoc('orais-wa-doc');
+          btnIr0.parentNode.insertBefore(opDoc.el, btnIr0.nextSibling);
+        }
+      } catch (ePv) {}
+      function soltar() { previas.forEach(function (p) { try { p.solta(); } catch (e) {} }); fechar(); }
+      document.getElementById('orais-wa-x').onclick = soltar;
       document.getElementById('orais-wa-ir').onclick = function () {
         if (podeAnexo) {
-          navigator.share({ files: files, text: d.texto || '', title: d.titulo || '' }).then(fechar).catch(function (err) {
-            if (err && err.name === 'AbortError') { fechar(); return; }
+          var fsEnv = (opDoc && opDoc.marcado()) ? window._oraisComoArquivo(files) : files;   // wa_video_ok
+          navigator.share({ files: fsEnv, text: d.texto || '', title: d.titulo || '' }).then(soltar).catch(function (err) {
+            if (err && err.name === 'AbortError') { soltar(); return; }
             // falhou de verdade: baixa e abre o texto
             baixarEAbrir();
           });
@@ -98,7 +190,7 @@
   (function () {
     function fechar() { var o = document.getElementById('orais-wa'); if (o) o.remove(); }
     function baixarUrl(a) {
-      if (a.blob) return Promise.resolve(new File([a.blob], a.nome || 'video.mp4', { type: a.mime || a.blob.type || 'video/mp4' }));   // wa_rapido
+      if (a.buf || a.blob || a.b64) return window._oraisArquivo(a, window.__oraisWaFonte || null);   // wa_video_ok: File novo deste documento, conferido (era: Blob direto)
       if (a.b64) {   // videos_wa: arquivo que ja vem pronto (video do Drive)
         try { var bin = atob(a.b64), n = bin.length, u8 = new Uint8Array(n); while (n--) u8[n] = bin.charCodeAt(n); return Promise.resolve(new File([u8], a.nome || 'video.mp4', { type: a.mime || 'video/mp4' })); }
         catch (eB) { return Promise.resolve(null); }
@@ -109,7 +201,7 @@
     window.addEventListener('message', function (ev) {
       var d = ev.data || {};
       if (d.tipo !== 'orais-wa-lote' || !d.lotes || !d.lotes.length) return;
-      var src = ev.source;
+      var src = ev.source; window.__oraisWaFonte = src;   // wa_video_ok
       try { src.postMessage({ tipo: 'orais-wa-ok' }, '*'); } catch (e) {}
       var i = 0, enviados = 0;
       function fim() { fechar(); try { src.postMessage({ tipo: 'orais-wa-lote-fim', enviados: enviados }, '*'); } catch (e) {} }
@@ -131,7 +223,7 @@
         document.getElementById('orais-wa-umum').onclick = function () { i = 0; passo(); };
         // envio_unico: o botao principal SEMPRE manda todos os produtos num toque so (o navegador exige 1 toque por compartilhamento,
         // entao "um por vez" continua existindo so como opcao secundaria).
-        var temVid = d.lotes.some(function (l) { return l.arquivos.some(function (a) { return !!a.b64 || !!a.blob || /^video\//.test(a.mime || ''); }); });
+        var temVid = d.lotes.some(function (l) { return l.arquivos.some(function (a) { return !!a.b64 || !!a.blob || !!a.buf || /^video\//.test(a.mime || ''); }); });
         var bT0 = document.getElementById('orais-wa-tudo'), bU0 = document.getElementById('orais-wa-umum');
         bT0.textContent = '📲 Enviar os ' + d.lotes.length + ' produtos pelo WhatsApp';
         if (d.lotes.length === 1) bT0.textContent = '📲 Enviar pelo WhatsApp';
@@ -149,9 +241,12 @@
           var texto = d.lotes.map(function (l) { return l.texto || ''; }).join('\n\n');
           st.textContent = pode ? files.length + ' arquivo(s) prontos.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
           bt.disabled = false; bt.style.opacity = '1';
+          var opDocT = null;   // wa_video_ok
+          try { if (files.some(window._oraisEhVideo)) { opDocT = window._oraisOpcaoDoc('orais-wa-doc-t'); var dicaT = bt.nextElementSibling; bt.parentNode.insertBefore(opDocT.el, dicaT ? dicaT.nextSibling : null); } } catch (eO) {}
           bt.onclick = function () {
             if (pode) {
-              navigator.share({ files: files, text: texto, title: d.titulo || '' }).then(function () { enviados = d.lotes.length; fim(); })
+              var fsT = (opDocT && opDocT.marcado()) ? window._oraisComoArquivo(files) : files;   // wa_video_ok
+              navigator.share({ files: fsT, text: texto, title: d.titulo || '' }).then(function () { enviados = d.lotes.length; fim(); })
                 .catch(function (err) {   // lote_fallback: se o compartilhar falhar (ex.: computador), baixa os arquivos e abre o WhatsApp com o texto
                   if (err && err.name === 'AbortError') return;
                   for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
@@ -186,11 +281,24 @@
           var files = fs.filter(function (x) { return !!x; });
           var st = document.getElementById('orais-wa-st'), bt = document.getElementById('orais-wa-ir'); if (!st || !bt) return;
           var pode = !!(files.length && navigator.share && navigator.canShare && navigator.canShare({ files: files }));
-          st.innerHTML = pode ? files.length + ' foto(s) prontas. Escolha o WhatsApp e o contato.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
+          var nVidP = files.filter(window._oraisEhVideo).length;
+          st.innerHTML = pode ? (files.length - nVidP) + ' foto(s)' + (nVidP ? ' + ' + nVidP + ' vídeo(s)' : '') + ' prontos. Escolha o WhatsApp e o contato.' : 'Seu aparelho não compartilha fotos por aqui: elas serão baixadas e o WhatsApp abre com o texto.';
           bt.disabled = false; bt.style.opacity = '1';
+          var opDocP = null, prevP = null;   // wa_video_ok: previa do video deste produto + opcao "como arquivo"
+          try {
+            var vP = files.filter(window._oraisEhVideo)[0];
+            if (vP && pode) {
+              opDocP = window._oraisOpcaoDoc('orais-wa-doc-p');
+              prevP = window._oraisPreviaVideo(vP, function (okV) { if (!okV && opDocP) opDocP.marcar(); }, true);
+              bt.parentNode.insertBefore(prevP.el, bt); bt.parentNode.insertBefore(prevP.legenda, bt);
+              bt.parentNode.insertBefore(opDocP.el, bt.nextSibling);
+            }
+          } catch (eP) {}
+          var soltaP = function () { if (prevP) { try { prevP.solta(); } catch (e) {} } };
           bt.onclick = function () {
             if (pode) {
-              navigator.share({ files: files, text: lote.texto || '', title: lote.titulo || '' }).then(function () { enviados++; i++; passo(); })
+              var fsP = (opDocP && opDocP.marcado()) ? window._oraisComoArquivo(files) : files;   // wa_video_ok
+              navigator.share({ files: fsP, text: lote.texto || '', title: lote.titulo || '' }).then(function () { soltaP(); enviados++; i++; passo(); })
                 .catch(function (err) {   // lote_fallback
                   if (err && err.name === 'AbortError') return;
                   for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }

@@ -94,6 +94,30 @@
       v.addEventListener('error', function () { fim(false, 'Este aparelho não conseguiu abrir o vídeo. No WhatsApp ele pode chegar preto: marquei pra mandar como arquivo.'); });
       return { el: wrap, legenda: leg, video: v, solta: function () { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} try { URL.revokeObjectURL(url); } catch (e2) {} } };
     };
+    // share_claro: onde este casco esta rodando (dentro de outro site?) e um painel que explica quando o anexo nao funciona
+    window._oraisEmbutidoEm = function () {
+      try { if (window.top === window.self) return ''; } catch (e) { return 'outro site'; }
+      try { var ao = location.ancestorOrigins; if (ao && ao.length) return String(ao[ao.length - 1]).replace(/^https?:\/\//, ''); } catch (e2) {}
+      try { if (document.referrer) return new URL(document.referrer).host; } catch (e3) {}
+      return 'outro site';
+    };
+    window._oraisShareFalhou = function (alvo, err, baixar) {
+      var host = window._oraisEmbutidoEm();
+      var nome = (err && (err.name || err.message)) ? String(err.name || err.message) : '';
+      var box = document.createElement('div');
+      box.style.cssText = 'margin:10px 0 0;padding:12px;border-radius:12px;background:#fff7ed;border:1px solid #fdba74;text-align:left;font-size:13px;color:#7c2d12;';
+      box.innerHTML = '<b>O WhatsApp não aceitou os anexos por aqui' + (nome ? ' (' + nome.replace(/</g, '&lt;') + ')' : '') + '.</b><br>' +
+        (host ? 'O app está aberto dentro de <b>' + host.replace(/</g, '&lt;') + '</b>, e esse site não libera o compartilhamento de arquivos. ' : '') +
+        'Abra o app direto no <b>rca.orais.com.br</b> (pode salvar na tela inicial) que o envio com anexo funciona.' +
+        '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+        '<button type="button" class="orais-wa-abrir-rca" style="flex:1;min-height:42px;border:0;border-radius:999px;background:#2F5556;color:#fff;font-weight:800;cursor:pointer;">Abrir no Orais RCA</button>' +
+        '<button type="button" class="orais-wa-baixar" style="flex:1;min-height:42px;border:1px solid #CFE0E0;border-radius:999px;background:#fff;color:#2F5556;font-weight:700;cursor:pointer;">Baixar arquivos e abrir o WhatsApp só com o texto</button></div>';
+      var antigo = alvo.querySelector('.orais-wa-share-falhou'); if (antigo) antigo.remove();
+      box.className = 'orais-wa-share-falhou';
+      alvo.appendChild(box);
+      box.querySelector('.orais-wa-abrir-rca').onclick = function () { window.open('https://rca.orais.com.br/', '_blank', 'noopener'); };
+      box.querySelector('.orais-wa-baixar').onclick = function () { try { baixar(); } catch (e) {} };
+    };
     // bloco "mandar videos como arquivo" (checkbox) — devolve {el, marcado()}
     window._oraisOpcaoDoc = function (id) {
       var lab = document.createElement('label');
@@ -167,11 +191,12 @@
           var fsEnv = (opDoc && opDoc.marcado()) ? window._oraisComoArquivo(files) : files;   // wa_video_ok
           navigator.share({ files: fsEnv, text: d.texto || '', title: d.titulo || '' }).then(soltar).catch(function (err) {
             if (err && err.name === 'AbortError') { soltar(); return; }
-            // falhou de verdade: baixa e abre o texto
-            baixarEAbrir();
+            // share_claro: falhou de verdade -> diz o que houve e deixa a pessoa escolher (antes: baixava em silencio)
+            window._oraisShareFalhou(ov.firstElementChild, err, baixarEAbrir);
           });
         } else baixarEAbrir();
       };
+      try { if (!podeAnexo && window._oraisEmbutidoEm()) window._oraisShareFalhou(ov.firstElementChild, { name: 'sem permissão de compartilhar aqui' }, baixarEAbrir); } catch (eSc) {}   // share_claro
       function baixarEAbrir() {
         try {
           for (var i = 0; i < files.length; i++) {
@@ -249,9 +274,11 @@
               navigator.share({ files: fsT, text: texto, title: d.titulo || '' }).then(function () { enviados = d.lotes.length; fim(); })
                 .catch(function (err) {   // lote_fallback: se o compartilhar falhar (ex.: computador), baixa os arquivos e abre o WhatsApp com o texto
                   if (err && err.name === 'AbortError') return;
-                  for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
-                  window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
-                  enviados = d.lotes.length; fim();
+                  window._oraisShareFalhou(ov.firstElementChild, err, function () {   // share_claro
+                    for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
+                    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+                    enviados = d.lotes.length; fim();
+                  });
                 });
             } else {
               for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
@@ -301,9 +328,11 @@
               navigator.share({ files: fsP, text: lote.texto || '', title: lote.titulo || '' }).then(function () { soltaP(); enviados++; i++; passo(); })
                 .catch(function (err) {   // lote_fallback
                   if (err && err.name === 'AbortError') return;
-                  for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
-                  window.open('https://wa.me/?text=' + encodeURIComponent(lote.texto || ''), '_blank');
-                  enviados++; i++; passo();
+                  window._oraisShareFalhou(ov.firstElementChild, err, function () {   // share_claro
+                    for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
+                    window.open('https://wa.me/?text=' + encodeURIComponent(lote.texto || ''), '_blank');
+                    enviados++; i++; passo();
+                  });
                 });
             } else {
               for (var k = 0; k < files.length; k++) { var a = document.createElement('a'); a.href = URL.createObjectURL(files[k]); a.download = files[k].name; document.body.appendChild(a); a.click(); (function (el) { setTimeout(function () { el.remove(); }, 4000); })(a); }
